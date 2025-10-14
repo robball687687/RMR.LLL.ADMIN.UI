@@ -1,6 +1,6 @@
 // src/pages/public/QuickFeedback.jsx
 import { useParams, useLocation } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Box,
   Paper,
@@ -10,22 +10,9 @@ import {
   TextField,
   Rating,
   Alert,
-  Collapse,
-  FormControlLabel,
-  Checkbox,
-  MenuItem,
+  CircularProgress,
 } from "@mui/material";
 import { feedbackApi } from "../../api/feedbackApi";
-
-const reasons = [
-  "Food quality",
-  "Wait time",
-  "Service",
-  "Cleanliness",
-  "Pricing",
-  "Order accuracy",
-  "Other",
-];
 
 export default function QuickFeedback() {
   const { orgId, promptId } = useParams();
@@ -38,118 +25,79 @@ export default function QuickFeedback() {
   const sourceParam = qs.get("source");
   const source = sourceParam || (isEmbed ? "embed" : "web");
 
+  // IMPORTANT: disable child->parent resizes by default for plain iframes
+  const allowResizePings = qs.get("resize") === "1";
+
   // State
   const [rating, setRating] = useState(5);
   const [text, setText] = useState("");
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
   const rootRef = useRef(null);
 
-  // Contact (optional, shown when rating !== 5)
-  const [okToContact, setOkToContact] = useState(false);
-  const [contactName, setContactName] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
-  const [contactPhone, setContactPhone] = useState("");
-  const [preferred, setPreferred] = useState("email"); // email|phone|sms
-  const [bestTime, setBestTime] = useState(""); // free text
-  const [reason, setReason] = useState("");
-
-  // Helper: whether contact section is visible
-  const showContact = Number(rating) !== 5;
-
-  // --- STRICT: Only send height on mount / section toggle / after submit
-  const postResize = () => {
-    if (!isEmbed) return;
+  // Safe, opt-in resize (off by default)
+  const postResize = useCallback(() => {
+    if (!isEmbed || !allowResizePings) return;
     const h =
       (rootRef.current?.scrollHeight ?? 0) ||
       document.body.scrollHeight ||
       document.documentElement.scrollHeight ||
       520;
-    window.parent.postMessage({ type: "lll:resize", height: h }, "*");
-  };
+    // parent won’t receive this unless you add a listener,
+    // but we keep the code gated for future use.
+    window.parent?.postMessage?.({ type: "lll:resize", height: h }, "*");
+  }, [isEmbed, allowResizePings]);
 
-  // Initial paints only (no observers)
+  // One mild resize after mount (only if allowed)
   useEffect(() => {
-    if (!isEmbed) return;
-    const t1 = setTimeout(postResize, 60);
-    const t2 = setTimeout(postResize, 220);
-    const t3 = setTimeout(postResize, 600);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, [isEmbed]);
-
-  // When contact section shows/hides or thanks screen appears, resize once
-  useEffect(() => {
-    if (!isEmbed) return;
+    if (!isEmbed || !allowResizePings) return;
     const t = setTimeout(postResize, 120);
     return () => clearTimeout(t);
-  }, [isEmbed, showContact, done]);
-
-  // Build contact object only if opted-in and any field present
-  const buildContactObject = () => {
-    if (!okToContact) return undefined;
-    const any =
-      contactName || contactEmail || contactPhone || preferred || bestTime || reason;
-    if (!any) return undefined;
-    return {
-      okToContact: true,
-      name: contactName || null,
-      email: contactEmail || null,
-      phone: contactPhone || null,
-      preferred: preferred || null,
-      bestTime: bestTime || null,
-      reason: reason || null,
-    };
-  };
-
-  const submit = async () => {
-    setError("");
-    const contact = buildContactObject();
-
-    // Primary attempt: include contact/meta fields (backend may ignore/accept)
-    const payload = {
-      orgId,
-      promptId,
-      rating: Number(rating),
-      text: text?.trim() || null,
-      source,
-      contact,
-    };
-
-    try {
-      await feedbackApi.create(payload);
-      afterSubmit();
-    } catch (e1) {
-      // Fallback: merge contact into text if API doesn't accept extra fields
-      try {
-        const mergedText =
-          (text?.trim() || "") +
-          (contact
-            ? `\n\n---\nContact opt-in:\nName: ${contact.name || "-"}\nEmail: ${contact.email || "-"}\nPhone: ${contact.phone || "-"}\nPreferred: ${contact.preferred || "-"}\nBest time: ${contact.bestTime || "-"}\nReason: ${contact.reason || "-"}`
-            : "");
-        await feedbackApi.create({
-          orgId,
-          promptId,
-          rating: Number(rating),
-          text: mergedText || null,
-          source,
-        });
-        afterSubmit();
-      } catch (e2) {
-        const d = e2?.response?.data;
-        setError(d?.detail || d?.title || e2.message);
-      }
-    }
-  };
+  }, [isEmbed, allowResizePings, postResize]);
 
   const afterSubmit = () => {
     setDone(true);
-    if (isEmbed) {
-      window.parent.postMessage({ type: "lll:submitted", ok: true }, "*");
-      setTimeout(postResize, 60); // one more after thanks screen
+    if (isEmbed && allowResizePings) {
+      window.parent?.postMessage?.({ type: "lll:submitted", ok: true }, "*");
+      setTimeout(postResize, 60);
+    }
+  };
+
+  const submit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError("");
+
+    if (!orgId || !promptId) {
+      setError("Missing org or prompt information.");
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      await feedbackApi.create({
+        orgId,
+        promptId,
+        rating: Number(rating) || 0,
+        text: text?.trim() || null,
+        source,
+      });
+      afterSubmit();
+    } catch (e) {
+      const d = e?.response?.data;
+      setError(d?.detail || d?.title || e.message || "Failed to submit feedback.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Submit on Ctrl+Enter / Cmd+Enter
+  const onKeyDown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      submit();
     }
   };
 
@@ -197,14 +145,14 @@ export default function QuickFeedback() {
 
   return (
     <Shell>
-      <Typography variant="h6" sx={{ mb: 2 }}>
+      <Typography variant="h6" sx={{ mb: 2, textAlign: "center" }}>
         How was your experience?
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      <Stack spacing={2}>
-        <Stack direction="row" alignItems="center" spacing={1}>
+      <Stack spacing={2} onKeyDown={onKeyDown}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ justifyContent: "center" }}>
           <Typography variant="body1">Rating:</Typography>
           <Rating
             value={rating}
@@ -216,115 +164,36 @@ export default function QuickFeedback() {
 
         <TextField
           label="Tell us more (optional)"
+          placeholder="What went great? What could be better?"
           multiline
           minRows={3}
-          // Let the textarea grow internally and scroll; do NOT trigger outer resize
-          // (no onFocus/onBlur handlers; no resize posts during typing)
+          key="opttext"
           value={text}
           onChange={(e) => setText(e.target.value)}
+          // No focus/blur handlers needed now that resizes are disabled.
           inputProps={{ dir: "ltr" }}
           InputProps={{
             sx: {
               "& .MuiInputBase-inputMultiline": {
                 overflow: "auto",
-                // Optional: limit visual growth to keep iframe stable
-                maxHeight: 220,
+                maxHeight: 220, // keeps inner scrolling neat
               },
               "& input, & textarea": { direction: "ltr", textAlign: "left" },
             },
           }}
         />
 
-        {/* Contact section for non-5-star ratings (triggers a single resize via effect) */}
-        <Collapse in={showContact} unmountOnExit>
-          <Stack
-            spacing={1.5}
-            sx={{
-              mt: 1.5,
-              p: 1.5,
-              border: "1px dashed",
-              borderColor: "divider",
-              borderRadius: 1.5,
-            }}
-          >
-            <Typography variant="subtitle2">Help us make this right</Typography>
-            <Typography variant="body2" color="text.secondary">
-              If you’d like, leave your info and the best way to reach you. We’ll follow up to fix things.
-            </Typography>
-
-            <TextField
-              select
-              label="What could be better? (optional)"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              fullWidth
-              size="small"
-            >
-              {reasons.map((r) => (
-                <MenuItem key={r} value={r}>
-                  {r}
-                </MenuItem>
-              ))}
-            </TextField>
-
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-              <TextField
-                label="Name (optional)"
-                value={contactName}
-                onChange={(e) => setContactName(e.target.value)}
-                fullWidth
-                size="small"
-              />
-              <TextField
-                label="Email (optional)"
-                type="email"
-                value={contactEmail}
-                onChange={(e) => setContactEmail(e.target.value)}
-                fullWidth
-                size="small"
-              />
-            </Stack>
-
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-              <TextField
-                label="Phone (optional)"
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                fullWidth
-                size="small"
-              />
-              <TextField
-                label="Preferred contact (email/phone/sms)"
-                value={preferred}
-                onChange={(e) => setPreferred(e.target.value)}
-                size="small"
-              />
-            </Stack>
-
-            <TextField
-              label="Best time to reach you (optional)"
-              value={bestTime}
-              onChange={(e) => setBestTime(e.target.value)}
-              size="small"
-              fullWidth
-            />
-
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={okToContact}
-                  onChange={(e) => setOkToContact(e.target.checked)}
-                />
-              }
-              label="It’s okay to contact me about this feedback"
-            />
-          </Stack>
-        </Collapse>
-
-        <Button variant="contained" onClick={submit}>Submit</Button>
+        <Button
+          variant="contained"
+          onClick={submit}
+          disabled={submitting}
+          endIcon={submitting ? <CircularProgress size={18} /> : null}
+        >
+          {submitting ? "Submitting..." : "Submit"}
+        </Button>
 
         {!isEmbed && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
             Org: {orgId} • Prompt: {promptId}
           </Typography>
         )}

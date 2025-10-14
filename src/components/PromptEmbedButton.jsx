@@ -25,25 +25,46 @@ export default function PromptEmbedButton({
   size = "small",
 }) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState("iframe"); // iframe | script
+  const [tab, setTab] = useState("webc"); // webc | iframe | script
   const [snack, setSnack] = useState("");
 
-  // Options for snippets
+  // Common options
+  const [theme, setTheme] = useState("auto"); // auto|light|dark
+
+  // Iframe options
   const [height, setHeight] = useState(520);
   const [maxWidth, setMaxWidth] = useState(480);
-  const [theme, setTheme] = useState("auto"); // auto|light|dark
-  const [mode, setMode] = useState("button"); // button|inline
+
+  // Legacy script options
+  const [modeLegacy, setModeLegacy] = useState("button"); // button|inline
   const [position, setPosition] = useState("bottom-right"); // for button mode
 
-  const link = useMemo(
-    () => `${(publicBase || "").replace(/\/+$/, "")}/f/${orgId}/${promptId}`,
-    [publicBase, orgId, promptId]
-  );
-  const scriptSrc = useMemo(
-    () => `${(publicBase || "").replace(/\/+$/, "")}/embed/lll-embed.js`,
+  // Web component (no-iframe) options
+  const [modeWebc, setModeWebc] = useState("inline"); // inline|button
+  const [buttonLabel, setButtonLabel] = useState("💬 Feedback");
+  const [apiBase, setApiBase] = useState(
+    (publicBase || "").replace(/\/+$/, "")
+  ); // usually your app root (must allow CORS)
+
+  const baseTrimmed = useMemo(
+    () => (publicBase || "").replace(/\/+$/, ""),
     [publicBase]
   );
 
+  const link = useMemo(
+    () => `${baseTrimmed}/f/${orgId}/${promptId}`,
+    [baseTrimmed, orgId, promptId]
+  );
+  const legacyScriptSrc = useMemo(
+    () => `${baseTrimmed}/embed/lll-embed.js`,
+    [baseTrimmed]
+  );
+  const webcScriptSrc = useMemo(
+    () => `${baseTrimmed}/embed/quickfeedback-noiframe.js`,
+    [baseTrimmed]
+  );
+
+  // ---------- Snippets ----------
   const iframeSnippet = useMemo(
     () =>
 `<iframe
@@ -56,17 +77,38 @@ export default function PromptEmbedButton({
     [link, theme, maxWidth, height, promptName]
   );
 
-  const scriptSnippet = useMemo(
+  const legacyScriptSnippet = useMemo(
     () =>
 `<div class="lll-prompt"
      data-org-id="${orgId}"
      data-prompt-id="${promptId}"
-     data-mode="${mode}"
-     ${mode === "button" ? `data-position="${position}"` : ""}
+     data-mode="${modeLegacy}"
+     ${modeLegacy === "button" ? `data-position="${position}"` : ""}
      data-theme="${theme}"></div>
-<script async src="${scriptSrc}"></script>`,
-    [orgId, promptId, mode, position, theme, scriptSrc]
+<script async src="${legacyScriptSrc}"></script>`,
+    [orgId, promptId, modeLegacy, position, theme, legacyScriptSrc]
   );
+
+  const webComponentSnippet = useMemo(() => {
+    const attrs = [
+      `org-id="${orgId}"`,
+      `prompt-id="${promptId}"`,
+      `api-base="${(apiBase || "").replace(/\/+$/, "")}"`,
+      `mode="${modeWebc}"`,
+      `theme="${theme}"`,
+      `source="web"`,
+    ];
+    if (modeWebc === "button" && buttonLabel.trim()) {
+      attrs.push(`button-label="${escapeAttr(buttonLabel)}"`);
+    }
+    return (
+`<script src="${webcScriptSrc}" defer></script>
+
+<lll-feedback
+  ${attrs.join("\n  ")}
+></lll-feedback>`
+    );
+  }, [orgId, promptId, apiBase, modeWebc, theme, buttonLabel, webcScriptSrc]);
 
   const handleCopy = async (text) => {
     try {
@@ -87,16 +129,76 @@ export default function PromptEmbedButton({
 
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>Embed “{promptName}”</DialogTitle>
+
         <DialogContent dividers>
-          <Tabs
-            value={tab}
-            onChange={(_, v) => setTab(v)}
-            sx={{ mb: 2 }}
-          >
-            <Tab value="iframe" label="Iframe (simplest)" />
-            <Tab value="script" label="Script (button/inline)" />
+          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
+            <Tab value="webc" label="Web Component (Recommended)" />
+            <Tab value="iframe" label="Iframe" />
+            <Tab value="script" label="Legacy Script" />
           </Tabs>
 
+          {/* Web Component */}
+          {tab === "webc" && (
+            <Stack spacing={2}>
+              <Typography variant="body2" color="text.secondary">
+                This embeds a <code>&lt;lll-feedback&gt;</code> web component—no iframe, professional styling, and no focus issues. Your API must allow CORS from the host site.
+              </Typography>
+
+              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel>Mode</InputLabel>
+                  <Select
+                    label="Mode"
+                    value={modeWebc}
+                    onChange={(e) => setModeWebc(e.target.value)}
+                  >
+                    <MenuItem value="inline">inline (embedded)</MenuItem>
+                    <MenuItem value="button">button (floating)</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" sx={{ minWidth: 160 }}>
+                  <InputLabel>Theme</InputLabel>
+                  <Select
+                    label="Theme"
+                    value={theme}
+                    onChange={(e) => setTheme(e.target.value)}
+                  >
+                    <MenuItem value="auto">auto</MenuItem>
+                    <MenuItem value="light">light</MenuItem>
+                    <MenuItem value="dark">dark</MenuItem>
+                  </Select>
+                </FormControl>
+
+                {modeWebc === "button" && (
+                  <TextField
+                    label="Button label"
+                    value={buttonLabel}
+                    onChange={(e) => setButtonLabel(e.target.value)}
+                    size="small"
+                    sx={{ minWidth: 220 }}
+                  />
+                )}
+              </Stack>
+
+              <TextField
+                label="API Base (must allow CORS)"
+                value={apiBase}
+                onChange={(e) => setApiBase(e.target.value)}
+                size="small"
+                fullWidth
+                helperText="Usually your app root, e.g. https://your-app.example. The component posts to `${apiBase}/api/feedback`."
+              />
+
+              <CodeBox code={webComponentSnippet} onCopy={() => handleCopy(webComponentSnippet)} />
+
+              <Typography variant="body2" color="text.secondary">
+                Preview isn’t shown here because it depends on the host origin’s CORS. Paste the snippet into any site and it will render immediately.
+              </Typography>
+            </Stack>
+          )}
+
+          {/* Iframe */}
           {tab === "iframe" && (
             <Stack spacing={2}>
               <Typography variant="body2" color="text.secondary">
@@ -108,7 +210,9 @@ export default function PromptEmbedButton({
                   label="Max Width (px)"
                   type="number"
                   value={maxWidth}
-                  onChange={(e) => setMaxWidth(Math.max(280, Number(e.target.value) || 480))}
+                  onChange={(e) =>
+                    setMaxWidth(Math.max(280, Number(e.target.value) || 480))
+                  }
                   sx={{ width: 180 }}
                   size="small"
                 />
@@ -116,13 +220,19 @@ export default function PromptEmbedButton({
                   label="Height (px)"
                   type="number"
                   value={height}
-                  onChange={(e) => setHeight(Math.max(320, Number(e.target.value) || 520))}
+                  onChange={(e) =>
+                    setHeight(Math.max(320, Number(e.target.value) || 520))
+                  }
                   sx={{ width: 180 }}
                   size="small"
                 />
                 <FormControl size="small" sx={{ minWidth: 160 }}>
                   <InputLabel>Theme</InputLabel>
-                  <Select label="Theme" value={theme} onChange={(e) => setTheme(e.target.value)}>
+                  <Select
+                    label="Theme"
+                    value={theme}
+                    onChange={(e) => setTheme(e.target.value)}
+                  >
                     <MenuItem value="auto">auto</MenuItem>
                     <MenuItem value="light">light</MenuItem>
                     <MenuItem value="dark">dark</MenuItem>
@@ -155,25 +265,34 @@ export default function PromptEmbedButton({
             </Stack>
           )}
 
+          {/* Legacy Script */}
           {tab === "script" && (
             <Stack spacing={2}>
               <Typography variant="body2" color="text.secondary">
-                This uses <code>lll-embed.js</code> that you host at <code>{scriptSrc}</code>. Choose a mode and theme, then paste the snippet.
+                This uses <code>lll-embed.js</code> hosted at <code>{legacyScriptSrc}</code>. Prefer the Web Component for best UX.
               </Typography>
 
               <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
                 <FormControl size="small" sx={{ minWidth: 160 }}>
                   <InputLabel>Mode</InputLabel>
-                  <Select label="Mode" value={mode} onChange={(e) => setMode(e.target.value)}>
+                  <Select
+                    label="Mode"
+                    value={modeLegacy}
+                    onChange={(e) => setModeLegacy(e.target.value)}
+                  >
                     <MenuItem value="button">button (floating)</MenuItem>
                     <MenuItem value="inline">inline (embedded)</MenuItem>
                   </Select>
                 </FormControl>
 
-                {mode === "button" && (
+                {modeLegacy === "button" && (
                   <FormControl size="small" sx={{ minWidth: 180 }}>
                     <InputLabel>Position</InputLabel>
-                    <Select label="Position" value={position} onChange={(e) => setPosition(e.target.value)}>
+                    <Select
+                      label="Position"
+                      value={position}
+                      onChange={(e) => setPosition(e.target.value)}
+                    >
                       <MenuItem value="bottom-right">bottom-right</MenuItem>
                       <MenuItem value="bottom-left">bottom-left</MenuItem>
                     </Select>
@@ -182,7 +301,11 @@ export default function PromptEmbedButton({
 
                 <FormControl size="small" sx={{ minWidth: 160 }}>
                   <InputLabel>Theme</InputLabel>
-                  <Select label="Theme" value={theme} onChange={(e) => setTheme(e.target.value)}>
+                  <Select
+                    label="Theme"
+                    value={theme}
+                    onChange={(e) => setTheme(e.target.value)}
+                  >
                     <MenuItem value="auto">auto</MenuItem>
                     <MenuItem value="light">light</MenuItem>
                     <MenuItem value="dark">dark</MenuItem>
@@ -190,36 +313,10 @@ export default function PromptEmbedButton({
                 </FormControl>
               </Stack>
 
-              <CodeBox code={scriptSnippet} onCopy={() => handleCopy(scriptSnippet)} />
-
-              <Typography variant="subtitle2" sx={{ mt: 1 }}>
-                Live Preview
-              </Typography>
-              {mode === "inline" ? (
-                <Box
-                  sx={{
-                    border: "1px dashed",
-                    borderColor: "divider",
-                    p: 1.5,
-                    borderRadius: 2,
-                    maxWidth: 560,
-                  }}
-                >
-                  <iframe
-                    title="Preview"
-                    src={`${link}?embed=1&theme=${theme}`}
-                    style={{ width: "100%", height: "520px", border: 0, display: "block" }}
-                    loading="lazy"
-                  />
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  The floating button opens a modal on the host site, so there’s no visual preview here.
-                </Typography>
-              )}
+              <CodeBox code={legacyScriptSnippet} onCopy={() => handleCopy(legacyScriptSnippet)} />
 
               <Typography variant="body2" color="text.secondary">
-                Tip: If your public page posts <code>{`{ type: 'lll:resize', height }`}</code> messages, the script will auto-resize iframes.
+                Tip: If your public page posts <code>{`{ type: 'lll:resize', height }`}</code> messages, the legacy script will auto-resize iframes.
               </Typography>
             </Stack>
           )}
@@ -262,15 +359,18 @@ function CodeBox({ code, onCopy }) {
       <TextField
         value={code}
         multiline
-        minRows={6}
+        minRows={8}
         fullWidth
-        InputProps={{ readOnly: true, sx: { fontFamily: "monospace" } }}
+        InputProps={{
+          readOnly: true,
+          sx: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" },
+        }}
       />
     </Box>
   );
 }
 
-// Basic HTML escaping to keep snippet title attribute safe
+// Basic escaping for attributes/text inside snippets
 function escapeHtml(s) {
   return String(s)
     .replaceAll("&", "&amp;")
@@ -278,4 +378,7 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+function escapeAttr(s) {
+  return escapeHtml(s);
 }
