@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "https://localhost:7145/api", // e.g. https://localhost:7145/api
+  baseURL: "https://rmrlllwebapi.azurewebsites.net/api", // e.g. https://localhost:7145/api
   withCredentials: false
 });
 
