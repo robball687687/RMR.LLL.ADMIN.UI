@@ -1,9 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+// src/pages/Prompts.jsx
+import { useEffect, useState } from "react";
 import Grid from "@mui/material/Grid";
 import {
-  Box, Paper, Stack, Typography, Button, Divider, Dialog, DialogTitle, DialogContent,
-  DialogActions, TextField, MenuItem, Table, TableHead, TableRow, TableCell,
-  TableBody, Rating, IconButton, Tooltip, Link
+  Box,
+  Paper,
+  Stack,
+  Typography,
+  Button,
+  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Rating,
+  IconButton,
+  Tooltip,
+  Link
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import QrCode2Icon from "@mui/icons-material/QrCode2";
@@ -11,6 +30,7 @@ import { Link as RouterLink } from "react-router-dom";
 import QRCode from "react-qr-code";
 import { promptsApi } from "../api/promptsApi";
 import PromptEmbedButton from "../components/PromptEmbedButton";
+
 const channels = ["qr", "web", "pos", "link", "kiosk"];
 
 export default function Prompts() {
@@ -25,32 +45,43 @@ export default function Prompts() {
 
   // date filter for stats (default 30d)
   const [fromUtc, setFromUtc] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString();
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString();
   });
   const [toUtc, setToUtc] = useState(() => new Date().toISOString());
 
-  const orgId = localStorage.getItem("lll_orgId") || "";
-  const publicBase = (import.meta.env.VITE_PUBLIC_BASE || window.location.origin).replace(/\/+$/, "");
+  // Build base + org fallbacks (avoid empty orgId in generated URLs)
+  const FALLBACK_ORG =
+    import.meta.env.VITE_LLL_ORG_ID ||
+    localStorage.getItem("lll_orgId") ||
+    "";
+
+  const publicBase = (import.meta.env.VITE_PUBLIC_BASE || window.location.origin).replace(
+    /\/+$/,
+    ""
+  );
 
   const load = async () => {
     setErr("");
     try {
-      // try stats endpoint first
+      // Try stats endpoint first
       const stats = await promptsApi.listWithStats({ fromUtc, toUtc });
-      console.log(stats);
       setRows(stats || []);
-    } catch (e1){
+    } catch (e1) {
+      // Fallback: plain list (no stats)
       try {
-        console.log(e1);
-        // fallback: plain list (no stats)
         const list = await promptsApi.list();
-        setRows((list || []).map(p => ({
-          promptId: p.promptId,
-          name: p.name,
-          channel: p.channel,
-          feedbackCount: 0,
-          avgRating: 0
-        })));
+        setRows(
+          (list || []).map((p) => ({
+            promptId: p.promptId,
+            name: p.name,
+            channel: p.channel,
+            orgId: p.orgId || p.OrgId || FALLBACK_ORG,
+            feedbackCount: 0,
+            avgRating: 0,
+          }))
+        );
       } catch (e2) {
         const d = e2?.response?.data;
         setErr(d?.detail || d?.title || e2.message);
@@ -59,8 +90,14 @@ export default function Prompts() {
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
-  const applyFilter = async () => { await load(); };
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const applyFilter = async () => {
+    await load();
+  };
 
   const onCreate = async () => {
     if (!name.trim()) return;
@@ -82,9 +119,14 @@ export default function Prompts() {
       <Grid container spacing={2}>
         <Grid item xs={12}>
           <Paper sx={{ p: 2 }}>
-            <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }} spacing={2}>
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              justifyContent="space-between"
+              alignItems={{ xs: "stretch", md: "center" }}
+              spacing={2}
+            >
               <Typography variant="h6">Prompts</Typography>
-              <Stack direction="row" spacing={1}>
+              <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
                 <TextField
                   label="From (ISO UTC)"
                   value={fromUtc}
@@ -99,8 +141,12 @@ export default function Prompts() {
                   size="small"
                   sx={{ minWidth: 280 }}
                 />
-                <Button onClick={applyFilter} variant="outlined">Apply</Button>
-                <Button onClick={() => setOpen(true)} variant="contained">Create Prompt</Button>
+                <Button onClick={applyFilter} variant="outlined">
+                  Apply
+                </Button>
+                <Button onClick={() => setOpen(true)} variant="contained">
+                  Create Prompt
+                </Button>
               </Stack>
             </Stack>
 
@@ -119,37 +165,91 @@ export default function Prompts() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {rows.map(r => {
-                    const link = `${publicBase}/f/${orgId}/${r.promptId}`;
+                  {rows.map((r) => {
+                    const orgForLink = (r.orgId || r.OrgId || FALLBACK_ORG || "").trim();
+                    const promptId = (r.promptId || r.PromptId || "").trim();
+
+                    const link =
+                      orgForLink && promptId
+                        ? `${publicBase}/f/${encodeURIComponent(orgForLink)}/${encodeURIComponent(
+                            promptId
+                          )}`
+                        : "";
+
                     return (
-                      <TableRow key={r.promptId}>
+                      <TableRow key={r.promptId || r.PromptId}>
                         <TableCell>{r.name}</TableCell>
                         <TableCell>{r.channel}</TableCell>
-                        <TableCell align="right">{r.feedbackCount ?? 0}</TableCell>
+                        <TableCell align="right">
+                          {Number(r.feedbackCount ?? 0)}
+                        </TableCell>
                         <TableCell align="center">
-                          <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
-                            <Rating value={Number(r.avgRating || 0)} precision={0.1} readOnly max={5} />
-                            <Typography variant="body2">{Number(r.avgRating || 0).toFixed(1)}</Typography>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            alignItems="center"
+                            justifyContent="center"
+                          >
+                            <Rating
+                              value={Number(r.avgRating || 0)}
+                              precision={0.1}
+                              readOnly
+                              max={5}
+                            />
+                            <Typography variant="body2">
+                              {Number(r.avgRating || 0).toFixed(1)}
+                            </Typography>
                           </Stack>
                         </TableCell>
                         <TableCell sx={{ maxWidth: 440, wordBreak: "break-all" }}>
-                          <Link href={link} target="_blank" rel="noopener noreferrer">{link}</Link>
+                          {link ? (
+                            <Link
+                              href={link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {link}
+                            </Link>
+                          ) : (
+                            <Typography variant="body2" color="error">
+                              Missing orgId/promptId
+                            </Typography>
+                          )}
                         </TableCell>
                         <TableCell align="right">
                           <Stack direction="row" justifyContent="flex-end" spacing={1}>
-                            <Tooltip title="Open public page"><IconButton href={link} target="_blank"><OpenInNewIcon fontSize="small" /></IconButton></Tooltip>
+                            <Tooltip title="Open public page">
+                              <span>
+                                <IconButton
+                                  href={link || undefined}
+                                  target="_blank"
+                                  disabled={!link}
+                                >
+                                  <OpenInNewIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+
                             <Tooltip title="View feedback">
-                              <Button size="small" component={RouterLink} to={`/feedback?promptId=${r.promptId}`} variant="outlined">
+                              <Button
+                                size="small"
+                                component={RouterLink}
+                                to={`/feedback?promptId=${promptId}`}
+                                variant="outlined"
+                                disabled={!promptId}
+                              >
                                 View Feedback
                               </Button>
                             </Tooltip>
+
                             <PromptQrButton url={link} />
+
                             <PromptEmbedButton
-                                publicBase={publicBase}
-                                orgId={orgId}
-                                promptId={r.promptId}
-                                promptName={r.name}
-                                />
+                              publicBase={publicBase}
+                              orgId={orgForLink}
+                              promptId={promptId}
+                              promptName={r.name}
+                            />
                           </Stack>
                         </TableCell>
                       </TableRow>
@@ -165,7 +265,11 @@ export default function Prompts() {
                 </TableBody>
               </Table>
             </Box>
-            {err && <Typography color="error" sx={{ mt: 2 }}>{err}</Typography>}
+            {err && (
+              <Typography color="error" sx={{ mt: 2 }}>
+                {err}
+              </Typography>
+            )}
           </Paper>
         </Grid>
       </Grid>
@@ -189,13 +293,19 @@ export default function Prompts() {
               onChange={(e) => setChannel(e.target.value)}
               sx={{ minWidth: 200 }}
             >
-              {channels.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              {channels.map((c) => (
+                <MenuItem key={c} value={c}>
+                  {c}
+                </MenuItem>
+              ))}
             </TextField>
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={onCreate} variant="contained">Create</Button>
+          <Button onClick={onCreate} variant="contained">
+            Create
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
@@ -205,20 +315,28 @@ export default function Prompts() {
 /** Small QR helper dialog */
 function PromptQrButton({ url }) {
   const [open, setOpen] = useState(false);
+  const safeUrl = (url || "").trim();
+
   return (
     <>
       <Tooltip title="Show QR">
-        <IconButton onClick={() => setOpen(true)}>
-          <QrCode2Icon fontSize="small" />
-        </IconButton>
+        <span>
+          <IconButton onClick={() => setOpen(true)} disabled={!safeUrl}>
+            <QrCode2Icon fontSize="small" />
+          </IconButton>
+        </span>
       </Tooltip>
+
       <Dialog open={open} onClose={() => setOpen(false)}>
         <DialogTitle>QR Code</DialogTitle>
         <DialogContent dividers>
           <Box sx={{ p: 2, bgcolor: "#fff" }}>
-            <QRCode value={url} style={{ width: 240, height: 240 }} />
+            {/* react-qr-code wants a non-empty string */}
+            <QRCode value={safeUrl || "about:blank"} style={{ width: 240, height: 240 }} />
           </Box>
-          <Typography variant="body2" sx={{ mt: 1, wordBreak: "break-all" }}>{url}</Typography>
+          <Typography variant="body2" sx={{ mt: 1, wordBreak: "break-all" }}>
+            {safeUrl || "Missing link"}
+          </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Close</Button>
