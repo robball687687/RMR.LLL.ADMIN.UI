@@ -1,22 +1,14 @@
 {
+  "routes": [
+    { "route": "/f/*", "rewrite": "/index.html" }  
+  ],
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": [
       "/api/*",
-      "/*.css",
-      "/*.js",
-      "/*.png",
-      "/*.jpg",
-      "/*.jpeg",
-      "/*.svg",
-      "/*.ico",
-      "/*.txt",
-      "/*.woff",
-      "/*.woff2"
+      "/assets/*",
+      "/*.{css,js,wasm,map}",
+      "/*.{png,jpg,jpeg,gif,svg,ico,txt,woff,woff2}"
     ]
-  },
-  "routes": [
-    { "route": "/f/*", "rewrite": "/index.html" },
-    { "route": "/*", "rewrite": "/index.html" }
-  ]
+  }
 }
