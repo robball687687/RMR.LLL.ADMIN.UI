@@ -1,43 +1,47 @@
 // src/pages/public/QuickFeedback.jsx
 import { useParams, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import {
-  Box,
-  Paper,
-  Stack,
-  Typography,
-  Button,
-  TextField,
-  Rating,
-  Alert,
-  CircularProgress,
-} from "@mui/material";
 import { feedbackApi } from "../../api/feedbackApi";
+
+const FOLLOWUP_SHOWS_WHEN = "lt5";
+const REASONS = ["Food quality","Wait time","Service","Cleanliness","Pricing","Order accuracy","Other"];
+const STAR = "★";
+const EMPTY = "☆";
+
+const showFollowupFor = (r) =>
+  FOLLOWUP_SHOWS_WHEN === "not4" ? Number(r) !== 4 :
+  FOLLOWUP_SHOWS_WHEN === "lt5"  ? Number(r) < 5  :
+  FOLLOWUP_SHOWS_WHEN === "lte3" ? Number(r) <= 3 : false;
 
 export default function QuickFeedback() {
   const { orgId, promptId } = useParams();
   const { search } = useLocation();
   const qs = useMemo(() => new URLSearchParams(search), [search]);
 
-  // Embed/theming
   const isEmbed = qs.get("embed") === "1";
   const theme = (qs.get("theme") || "auto").toLowerCase();
-  const sourceParam = qs.get("source");
-  const source = sourceParam || (isEmbed ? "embed" : "web");
-
-  // IMPORTANT: disable child->parent resizes by default for plain iframes
+  const source = (qs.get("source")) || (isEmbed ? "embed" : "web");
   const allowResizePings = qs.get("resize") === "1";
 
-  // State
+  // Keep re-renders to a minimum
   const [rating, setRating] = useState(5);
-  const [text, setText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+
+  // 👇 Uncontrolled textarea: no state – no rerenders while typing
+  const textRef = useRef(null);
+
+  // Follow-up (these *do* re-render, but much less frequently than typing)
+  const [fuReason, setFuReason] = useState("");
+  const [fuName, setFuName] = useState("");
+  const [fuEmail, setFuEmail] = useState("");
+  const [fuPhone, setFuPhone] = useState("");
+  const [fuPref, setFuPref] = useState("email");
+  const [fuTime, setFuTime] = useState("");
 
   const rootRef = useRef(null);
 
-  // Safe, opt-in resize (off by default)
   const postResize = useCallback(() => {
     if (!isEmbed || !allowResizePings) return;
     const h =
@@ -45,17 +49,35 @@ export default function QuickFeedback() {
       document.body.scrollHeight ||
       document.documentElement.scrollHeight ||
       520;
-    // parent won’t receive this unless you add a listener,
-    // but we keep the code gated for future use.
     window.parent?.postMessage?.({ type: "lll:resize", height: h }, "*");
   }, [isEmbed, allowResizePings]);
 
-  // One mild resize after mount (only if allowed)
   useEffect(() => {
     if (!isEmbed || !allowResizePings) return;
     const t = setTimeout(postResize, 120);
     return () => clearTimeout(t);
   }, [isEmbed, allowResizePings, postResize]);
+
+  // Resize only when follow-up visibility toggles
+  useEffect(() => {
+    if (!isEmbed || !allowResizePings) return;
+    const t = setTimeout(postResize, 60);
+    return () => clearTimeout(t);
+  }, [rating, isEmbed, allowResizePings, postResize]);
+
+  const mergeFollowupIntoText = (base) => {
+    const any = fuReason || fuName || fuEmail || fuPhone || fuPref || fuTime;
+    if (!showFollowupFor(rating) || !any) return (base || "").trim();
+    return (
+      `${(base || "").trim()}\n\n---\nFollow-up details:\n` +
+      `Reason: ${fuReason || "-"}\n` +
+      `Name: ${fuName || "-"}\n` +
+      `Email: ${fuEmail || "-"}\n` +
+      `Phone: ${fuPhone || "-"}\n` +
+      `Preferred: ${fuPref || "-"}\n` +
+      `Best time: ${fuTime || "-"}`
+    );
+  };
 
   const afterSubmit = () => {
     setDone(true);
@@ -77,11 +99,13 @@ export default function QuickFeedback() {
     }
 
     try {
+      const rawText = textRef.current?.value ?? "";
+      const mergedText = mergeFollowupIntoText(rawText);
       await feedbackApi.create({
         orgId,
         promptId,
         rating: Number(rating) || 0,
-        text: text?.trim() || null,
+        text: mergedText || null,
         source,
       });
       afterSubmit();
@@ -93,111 +117,228 @@ export default function QuickFeedback() {
     }
   };
 
-  // Submit on Ctrl+Enter / Cmd+Enter
-  const onKeyDown = (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-      e.preventDefault();
-      submit();
-    }
-  };
-
   const Shell = ({ children }) => (
-    <Box
+    <div
       ref={rootRef}
-      data-embed={isEmbed ? "1" : "0"}
       data-theme={theme}
-      sx={{
+      style={{
         display: "grid",
         placeItems: "center",
         minHeight: isEmbed ? "unset" : "100vh",
-        py: isEmbed ? 0 : 4,
+        padding: isEmbed ? 0 : 16,
       }}
     >
-      <Paper
-        elevation={isEmbed ? 0 : 1}
-        sx={{
-          p: isEmbed ? 2 : 3,
+      <style>{BASE_STYLES}</style>
+      <div
+        className="card"
+        style={{
           width: "100%",
           maxWidth: 520,
-          border: isEmbed ? "1px solid" : "none",
-          borderColor: isEmbed ? "divider" : "transparent",
-          borderRadius: 2,
-          boxShadow: isEmbed ? "none" : undefined,
+          border: isEmbed ? "1px solid var(--line)" : "none",
+          borderRadius: 16,
+          padding: isEmbed ? 16 : 24,
+          boxShadow: isEmbed ? "none" : "0 10px 30px rgba(0,0,0,.06)",
+          background: "var(--bg)",
+          color: "var(--fg)",
         }}
       >
         {children}
-      </Paper>
-    </Box>
+      </div>
+    </div>
   );
 
+  // Done screen
   if (done) {
     return (
       <Shell>
-        <Typography variant="h5" sx={{ mb: 1, textAlign: "center" }}>
-          Thanks for your feedback!
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center" }}>
-          We really appreciate it.
-        </Typography>
+        <div className="stack">
+          <div className="title">Thanks for your feedback!</div>
+          <div className="subtitle">We really appreciate it.</div>
+        </div>
       </Shell>
     );
   }
 
   return (
     <Shell>
-      <Typography variant="h6" sx={{ mb: 2, textAlign: "center" }}>
-        How was your experience?
-      </Typography>
+      <div className="header">
+        <div>
+          <div className="title">How was your experience?</div>
+          <div className="subtitle">Your feedback helps us improve.</div>
+        </div>
+      </div>
+      <div className="hr" />
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error ? <div className="alert">{error}</div> : null}
 
-      <Stack spacing={2} onKeyDown={onKeyDown}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ justifyContent: "center" }}>
-          <Typography variant="body1">Rating:</Typography>
-          <Rating
-            value={rating}
-            onChange={(_, v) => setRating(v || 0)}
-            max={5}
-            getLabelText={(value) => `${value} Star${value !== 1 ? "s" : ""}`}
-          />
-        </Stack>
+      <div className="stack">
+        {/* Rating (plain buttons, minimal state) */}
+        <div className="row">
+          <div className="badge">Rating: {rating}/5</div>
+          <div className="stars" aria-label="Rating">
+            {Array.from({ length: 5 }).map((_, i) => {
+              const val = i + 1;
+              const filled = val <= rating;
+              return (
+                <button
+                  key={val}
+                  type="button"
+                  className="star"
+                  aria-pressed={filled ? "true" : "false"}
+                  aria-label={`${val} star`}
+                  onClick={() => { setRating(val); setError(""); }}
+                >
+                  {filled ? STAR : EMPTY}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-        <TextField
-          label="Tell us more (optional)"
-          placeholder="What went great? What could be better?"
-          multiline
-          minRows={3}
-          key="opttext"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          // No focus/blur handlers needed now that resizes are disabled.
-          inputProps={{ dir: "ltr" }}
-          InputProps={{
-            sx: {
-              "& .MuiInputBase-inputMultiline": {
-                overflow: "auto",
-                maxHeight: 220, // keeps inner scrolling neat
-              },
-              "& input, & textarea": { direction: "ltr", textAlign: "left" },
-            },
+        {/* Uncontrolled textarea — focus stays rock solid */}
+        <textarea
+          ref={textRef}
+          placeholder="Tell us more (optional)"
+          onFocus={() => setError("")}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
           }}
         />
 
-        <Button
-          variant="contained"
-          onClick={submit}
-          disabled={submitting}
-          endIcon={submitting ? <CircularProgress size={18} /> : null}
-        >
-          {submitting ? "Submitting..." : "Submit"}
-        </Button>
+        {/* Follow-up (collapsible). Changing these can re-render, but not on every keystroke */}
+        <div className={`collapse ${showFollowupFor(rating) ? "open" : ""}`}>
+          <div className="helper">Help us make this right</div>
+
+          <div className="grid grid-2">
+            <label>
+              <div className="helper" style={{ marginBottom: 6 }}>
+                What could be better? (optional)
+              </div>
+              <select className="input" value={fuReason} onChange={(e) => setFuReason(e.target.value)}>
+                <option value=""></option>
+                {REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            <label>
+              <div className="helper" style={{ marginBottom: 6 }}>Preferred contact (email/phone/sms)</div>
+              <input className="input" placeholder="email" value={fuPref} onChange={(e) => setFuPref(e.target.value)} />
+            </label>
+          </div>
+
+          <div className="grid grid-2">
+            <label>
+              <div className="helper" style={{ marginBottom: 6 }}>Name (optional)</div>
+              <input className="input" value={fuName} onChange={(e) => setFuName(e.target.value)} />
+            </label>
+            <label>
+              <div className="helper" style={{ marginBottom: 6 }}>Email (optional)</div>
+              <input className="input" type="email" value={fuEmail} onChange={(e) => setFuEmail(e.target.value)} />
+            </label>
+          </div>
+
+          <div className="grid grid-2">
+            <label>
+              <div className="helper" style={{ marginBottom: 6 }}>Phone (optional)</div>
+              <input className="input" value={fuPhone} onChange={(e) => setFuPhone(e.target.value)} />
+            </label>
+            <label>
+              <div className="helper" style={{ marginBottom: 6 }}>Best time to reach you (optional)</div>
+              <input className="input" placeholder="e.g., afternoons" value={fuTime} onChange={(e) => setFuTime(e.target.value)} />
+            </label>
+          </div>
+        </div>
+
+        <div className="actions">
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => {
+              if (textRef.current) textRef.current.value = "";
+              setRating(5);
+              setFuReason(""); setFuName(""); setFuEmail(""); setFuPhone(""); setFuPref("email"); setFuTime("");
+              setError("");
+            }}
+          >
+            Cancel
+          </button>
+          <button type="button" className="btn" disabled={submitting} onClick={submit}>
+            {submitting ? "Submitting…" : "Submit"}
+          </button>
+        </div>
 
         {!isEmbed && (
-          <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
+          <div className="helper" style={{ textAlign: "center", marginTop: 8 }}>
             Org: {orgId} • Prompt: {promptId}
-          </Typography>
+          </div>
         )}
-      </Stack>
+      </div>
     </Shell>
   );
 }
+
+const BASE_STYLES = `
+:root{--fg:#0f172a;--muted:#64748b;--line:#e5e7eb;--bg:#fff}
+*[data-theme="dark"]{--fg:#e5e5e5;--muted:#9aa3ad;--line:#333;--bg:#111}
+*{box-sizing:border-box} body{margin:0}
+.card{border:1px solid var(--line);border-radius:16px;background:var(--bg);color:var(--fg)}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.title{font-weight:700;font-size:18px;letter-spacing:.2px}
+.subtitle{font-size:13px;color:var(--muted)}
+.hr{height:1px;background:linear-gradient(90deg,#0000,var(--line),#0000);margin:10px 0 14px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.stars {
+  display: flex;
+  gap: 6px;
+  user-select: none;
+}
+
+.star {
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: 8px;
+  transition: transform 0.08s ease, background-color 0.12s ease;
+  color: #facc15; /* <-- bright yellow (Tailwind amber-400) */
+  text-shadow: 0 0 3px rgba(0,0,0,0.2);
+}
+
+.star:hover {
+  transform: translateY(-1px);
+  background: rgba(250, 204, 21, 0.15);
+}
+
+*[data-theme="dark"] .star {
+  color: #fde047; /* slightly lighter for dark mode */
+}
+
+*[data-theme="dark"] .star:hover {
+  background: rgba(253, 224, 71, 0.15);
+}
+
+textarea{width:100%;min-height:104px;resize:vertical;padding:12px;border:1px solid var(--line);border-radius:12px;font:inherit;line-height:1.5;background:var(--bg);color:var(--fg)}
+textarea::placeholder{color:#94a3b8}
+.input, select{width:100%;height:38px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font:inherit;color:var(--fg)}
+select{height:40px}
+.grid{display:grid;grid-template-columns:1fr;gap:10px}
+@media (min-width: 520px){ .grid-2{grid-template-columns:1fr 1fr} }
+.helper{font-size:12px;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#475569;background:#f1f5f9;padding:4px 8px;border-radius:9999px}
+*[data-theme="dark"] .badge{ background:#1f2937; color:#cbd5e1 }
+.alert{padding:10px;border-radius:12px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b;font-size:14px;margin-bottom:8px}
+*[data-theme="dark"] .alert{border-color:#7f1d1d;background:#450a0a;color:#fecaca}
+.collapse{overflow:hidden;transition:max-height .18s ease;max-height:0}
+.collapse.open{max-height:700px}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+.btn{border-radius:9999px;padding:10px 14px;border:1px solid var(--line);background:#111;color:#fff;cursor:pointer;min-width:100px}
+.btn[disabled]{opacity:.7;cursor:not-allowed}
+.btn-outline{background:var(--bg);color:#111}
+*[data-theme="dark"] .btn{ background:#fff; color:#111; border-color:#333 }
+*[data-theme="dark"] .btn-outline{ background:#111; color:#e5e5e5; border-color:#333 }
+`;

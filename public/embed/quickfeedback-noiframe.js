@@ -46,12 +46,32 @@ a{color:inherit}
 .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
 .stars{display:flex;gap:6px;user-select:none}
+
 .star{
-  font-size:24px;line-height:1;cursor:pointer;border:none;background:transparent;padding:4px 6px;border-radius:8px;
+  font-size:24px;
+  line-height:1;
+  cursor:pointer;
+  border:none;
+  background:transparent;
+  padding:4px 6px;
+  border-radius:8px;
   transition:transform .08s ease, background-color .12s ease;
+  color:#facc15;              /* ← yellow stars */
+  text-shadow:0 0 3px rgba(0,0,0,.2);
 }
-.star:hover{transform:translateY(-1px);background:#f8fafc}
-.star:focus-visible{outline:2px solid #2563eb}
+
+.star:hover{
+  transform:translateY(-1px);
+  background:rgba(250,204,21,.15);  /* subtle amber hover */
+}
+
+:host([theme="dark"]) .star{
+  color:#fde047;              /* slightly lighter yellow for dark mode */
+}
+
+:host([theme="dark"]) .star:hover{
+  background:rgba(253,224,71,.15);
+}
 
 textarea{
   width:100%;min-height:104px;resize:vertical;padding:12px 12px;border:1px solid #e5e7eb;border-radius:12px;
