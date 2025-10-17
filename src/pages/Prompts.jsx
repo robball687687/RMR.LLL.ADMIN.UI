@@ -25,11 +25,10 @@ import {
   Link
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import QrCode2Icon from "@mui/icons-material/QrCode2";
 import { Link as RouterLink } from "react-router-dom";
-import QRCode from "react-qr-code";
 import { promptsApi } from "../api/promptsApi";
 import PromptEmbedButton from "../components/PromptEmbedButton";
+import PromptQrButton from "../components/PromptQrButton"; // ✅ new component
 
 const channels = ["qr", "web", "pos", "link", "kiosk"];
 
@@ -176,6 +175,13 @@ export default function Prompts() {
                           )}`
                         : "";
 
+                    const dlName =
+                      `qr-${(r.name || promptId || "prompt")
+                        .toString()
+                        .toLowerCase()
+                        .replace(/\s+/g, "-")
+                        .replace(/[^a-z0-9-_]/g, "")}.jpg`;
+
                     return (
                       <TableRow key={r.promptId || r.PromptId}>
                         <TableCell>{r.name}</TableCell>
@@ -242,7 +248,8 @@ export default function Prompts() {
                               </Button>
                             </Tooltip>
 
-                            <PromptQrButton url={link} />
+                            {/* ✅ Reusable QR button with JPG download */}
+                            <PromptQrButton url={link} fileName={dlName} />
 
                             <PromptEmbedButton
                               publicBase={publicBase}
@@ -309,39 +316,5 @@ export default function Prompts() {
         </DialogActions>
       </Dialog>
     </Box>
-  );
-}
-
-/** Small QR helper dialog */
-function PromptQrButton({ url }) {
-  const [open, setOpen] = useState(false);
-  const safeUrl = (url || "").trim();
-
-  return (
-    <>
-      <Tooltip title="Show QR">
-        <span>
-          <IconButton onClick={() => setOpen(true)} disabled={!safeUrl}>
-            <QrCode2Icon fontSize="small" />
-          </IconButton>
-        </span>
-      </Tooltip>
-
-      <Dialog open={open} onClose={() => setOpen(false)}>
-        <DialogTitle>QR Code</DialogTitle>
-        <DialogContent dividers>
-          <Box sx={{ p: 2, bgcolor: "#fff" }}>
-            {/* react-qr-code wants a non-empty string */}
-            <QRCode value={safeUrl || "about:blank"} style={{ width: 240, height: 240 }} />
-          </Box>
-          <Typography variant="body2" sx={{ mt: 1, wordBreak: "break-all" }}>
-            {safeUrl || "Missing link"}
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
-    </>
   );
 }
