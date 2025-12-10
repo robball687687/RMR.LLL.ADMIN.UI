@@ -153,7 +153,52 @@ export default function QuickFeedback() {
       <Shell>
         <div className="stack">
           <div className="title">Thanks for your feedback!</div>
-          <div className="subtitle">We really appreciate it.</div>
+          <div className="subtitle">We really appreciate it. 🙏</div>
+          {rating === 5 && (
+          <div className="review-section">
+            <div className="review-heading">
+              Have a minute to leave a public review?
+            </div>
+
+            <div className="review-links">
+              <a
+                href="https://www.tripadvisor.com/Restaurant_Review-g41773-d23626374-Reviews-The_Mea_Thai_Cuisine-Plymouth_Massachusetts.html"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                🧭 Tripadvisor
+              </a>
+              <a
+                href="https://www.yelp.com/biz/the-mea-thai-cuisine-plymouth"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                🧡 Yelp
+              </a>
+              <a
+                href="https://www.google.com/search?q=the+mea+thai+cuisine+plymouth"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                🔍 Google
+              </a>
+              <a
+                href="https://www.happycow.net/reviews/the-mea-plymouth-237894"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                🌱 HappyCow
+              </a>
+            </div>
+
+            <div className="review-note">
+              🥟 Email a screenshot of your posted review to{" "}
+              <a href="mailto:robball687@gmail.com">robball687@gmail.com</a> and
+              we&apos;ll send you a coupon code for a <strong>free appetizer</strong>.
+              One free appetizer per review, limit one free app per visit/order.
+            </div>
+          </div>
+          )}
         </div>
       </Shell>
     );
@@ -341,4 +386,35 @@ select{height:40px}
 .btn-outline{background:var(--bg);color:#111}
 *[data-theme="dark"] .btn{ background:#fff; color:#111; border-color:#333 }
 *[data-theme="dark"] .btn-outline{ background:#111; color:#e5e5e5; border-color:#333 }
+
+/* Small review callout on thank-you screen */
+.review-section{
+  margin-top:8px;
+  padding:8px 10px;
+  border-radius:12px;
+  background:#f8fafc;
+}
+*[data-theme="dark"] .review-section{
+  background:#020617;
+}
+.review-heading{
+  font-size:12px;
+  font-weight:500;
+  margin-bottom:4px;
+}
+.review-links{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  font-size:12px;
+}
+.review-links a{
+  text-decoration:underline;
+}
+.review-note{
+  font-size:11px;
+  color:var(--muted);
+  margin-top:4px;
+  line-height:1.4;
+}
 `;
