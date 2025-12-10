@@ -111,6 +111,40 @@ select{height:40px}
 .collapse{overflow:hidden;transition:max-height .18s ease;max-height:0}
 .collapse.open{max-height:700px}
 
+.review-section{
+  margin-top:8px;
+  padding:8px 10px;
+  border-radius:12px;
+  background:#f8fafc;
+  font-size:12px;
+}
+.review-heading{
+  font-weight:500;
+  margin-bottom:4px;
+}
+.review-links{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-bottom:4px;
+}
+.review-links a{
+  text-decoration:underline;
+}
+.review-note{
+  font-size:11px;
+  color:#64748b;
+  line-height:1.4;
+}
+
+/* Dark mode tweaks for review section */
+:host([theme="dark"]) .review-section{
+  background:#020617;
+}
+:host([theme="dark"]) .review-note{
+  color:#9aa3ad;
+}
+
 /* Dark */
 :host([theme="dark"]){color:#e5e5e5}
 :host([theme="dark"]) .card,
@@ -320,6 +354,45 @@ select{height:40px}
           <div class="title">Thanks for your feedback!</div>
           <div class="subtitle">We really appreciate it.</div>
         `;
+
+        // Only show public review + free app section if they gave 5 stars
+        if (Number(this._rating) === 5) {
+          const review = document.createElement("div");
+          review.className = "review-section";
+          review.innerHTML = `
+            <div class="review-heading">Have a minute to leave a public review?</div>
+            <div class="review-links">
+              <a
+                href="https://www.tripadvisor.com/Restaurant_Review-g41773-d23626374-Reviews-The_Mea_Thai_Cuisine-Plymouth_Massachusetts.html"
+                target="_blank"
+                rel="noopener noreferrer"
+              >🧭 Tripadvisor</a>
+              <a
+                href="https://www.yelp.com/biz/the-mea-thai-cuisine-plymouth"
+                target="_blank"
+                rel="noopener noreferrer"
+              >🧡 Yelp</a>
+              <a
+                href="https://www.google.com/search?q=the+mea+thai+cuisine+plymouth"
+                target="_blank"
+                rel="noopener noreferrer"
+              >🔍 Google</a>
+              <a
+                href="https://www.happycow.net/reviews/the-mea-plymouth-237894"
+                target="_blank"
+                rel="noopener noreferrer"
+              >🌱 HappyCow</a>
+            </div>
+            <div class="review-note">
+              🥟 Email a screenshot of your posted review to
+              <a href="mailto:robball687@gmail.com"> robball687@gmail.com</a>
+              and we&apos;ll send you a coupon code for a <strong>free appetizer</strong>.
+              One free appetizer per review, limit one free app per visit/order.
+            </div>
+          `;
+          wrap.appendChild(review);
+        }
+
         card.appendChild(wrap);
         container.appendChild(card);
         return;
